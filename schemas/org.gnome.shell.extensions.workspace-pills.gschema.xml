@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.workspace-pills" path="/org/gnome/shell/extensions/workspace-pills/">
+    <key name="inactive-color" type="s">
+      <default>'rgba(128, 128, 128, 0.2)'</default>
+      <summary>Inactive Pill Color</summary>
+    </key>
+    <key name="active-color" type="s">
+      <default>'#3584e4'</default>
+      <summary>Active Pill Color</summary>
+    </key>
+    <key name="hover-color" type="s">
+      <default>'rgba(128, 128, 128, 0.4)'</default>
+      <summary>Hover Pill Color</summary>
+    </key>
+    <key name="border-radius" type="i">
+      <default>12</default>
+      <summary>Border Radius</summary>
+    </key>
+    <key name="vertical-padding" type="i">
+      <default>2</default>
+      <summary>Vertical Padding</summary>
+    </key>
+    <key name="horizontal-padding" type="i">
+      <default>8</default>
+      <summary>Horizontal Padding</summary>
+    </key>
+    <key name="icon-size" type="i">
+      <default>16</default>
+      <summary>App Icon Size</summary>
+    </key>
+    <key name="show-activities" type="b">
+      <default>false</default>
+      <summary>Show Activities Button</summary>
+    </key>
+  </schema>
+</schemalist>
