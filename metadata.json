@@ -2,7 +2,7 @@
     "name": "Workspace Pills",
     "description": "Shows workspaces and their running apps in the top bar as pills.",
     "uuid": "workspace-pills@thatmechguy",
-    "shell-version": ["45", "46","47","48","49"],
+    "shell-version": ["45", "46","47","48","49","50"],
     "url": "https://github.com/your-repo",
     "version": 1,
     "settings-schema": "org.gnome.shell.extensions.workspace-pills"
