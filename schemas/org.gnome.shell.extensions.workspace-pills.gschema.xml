@@ -13,6 +13,14 @@
       <default>'rgba(128, 128, 128, 0.4)'</default>
       <summary>Hover Pill Color</summary>
     </key>
+    <key name="border-color" type="s">
+      <default>'rgba(128, 128, 128, 0.3)'</default>
+      <summary>Inactive Pill Border Color</summary>
+    </key>
+    <key name="active-border-color" type="s">
+      <default>'#3584e4'</default>
+      <summary>Active Pill Border Color</summary>
+    </key>
     <key name="border-radius" type="i">
       <default>12</default>
       <summary>Border Radius</summary>
@@ -28,6 +36,23 @@
     <key name="icon-size" type="i">
       <default>16</default>
       <summary>App Icon Size</summary>
+    </key>
+    <key name="show-workspace-number" type="b">
+      <default>true</default>
+      <summary>Show Workspace Number</summary>
+    </key>
+    <key name="hide-empty-workspaces" type="b">
+      <default>false</default>
+      <summary>Hide Empty Workspaces</summary>
+    </key>
+    <key name="panel-position" type="s">
+      <default>'left'</default>
+      <summary>Panel Position</summary>
+      <choices>
+        <choice value="left"/>
+        <choice value="center"/>
+        <choice value="right"/>
+      </choices>
     </key>
     <key name="show-activities" type="b">
       <default>false</default>

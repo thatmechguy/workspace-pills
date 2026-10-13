@@ -1,35 +1,21 @@
 .workspace-pills-container {
-    spacing: 8px;
-    padding-left: 8px;
-    padding-right: 8px;
+    spacing: 6px;
+    padding: 0 6px;
 }
 
 .workspace-pill {
-    padding: 0 8px;
-    margin-top: 2px;
-    margin-bottom: 2px;
-    border-radius: 12px;
-    background-color: rgba(128, 128, 128, 0.2);
-    border: 1px solid rgba(128, 128, 128, 0.3);
     spacing: 4px;
+    margin: 2px 0;
+    border: 1px solid transparent;
 }
 
-.workspace-pill:hover {
-    background-color: rgba(128, 128, 128, 0.4);
-}
-
-.workspace-pill.active {
-    background-color: #3584e4; /* A standard blue from Adwaita */
-    border-color: #3584e4;
+.workspace-pill:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.6);
+    outline-offset: 1px;
 }
 
 .workspace-pill-label {
-    color: #ffffff;
     font-weight: bold;
-}
-
-.workspace-pill.active .workspace-pill-label {
-    color: #ffffff;
 }
 
 .workspace-pill-app-icons {

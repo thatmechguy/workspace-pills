@@ -43,9 +43,24 @@ class WorkspaceIndicator extends St.BoxLayout {
         });
         this.add_child(this._appIconsBox);
 
-        // Switch to this workspace when clicked
+        // Switch to this workspace when clicked (left click only)
         this.connect('button-press-event', (actor, event) => {
-            this._workspace.activate(event.get_time());
+            if (event.get_button() !== 1)
+                return Clutter.EVENT_PROPAGATE;
+            this._activate();
+            return Clutter.EVENT_STOP;
+        });
+
+        // Keyboard accessibility: Enter/Space activates the workspace
+        this.connect('key-press-event', (actor, event) => {
+            const symbol = event.get_key_symbol();
+            if (symbol === Clutter.KEY_Return ||
+                symbol === Clutter.KEY_KP_Enter ||
+                symbol === Clutter.KEY_space) {
+                this._activate();
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
         });
 
         // Connect to workspace signals to update app icons
@@ -55,15 +70,36 @@ class WorkspaceIndicator extends St.BoxLayout {
 
         // Watch for setting changes and hover
         this._settingsChangedId = this._settings.connect('changed', (s, key) => {
-            if (key === 'icon-size') {
+            if (key === 'icon-size' || key === 'show-workspace-number')
                 this._queueRedisplay();
-            }
-            this._updateStyle();
+            if (key === 'active-color' || key === 'inactive-color' ||
+                key === 'hover-color' || key === 'border-color' ||
+                key === 'active-border-color' || key === 'border-radius' ||
+                key === 'vertical-padding' || key === 'horizontal-padding')
+                this._updateStyle();
         });
         this.connect('notify::hover', () => this._updateStyle());
 
+        this._updateLabelVisibility();
         this._redisplay();
         this._updateStyle();
+    }
+
+    get workspace() {
+        return this._workspace;
+    }
+
+    // Whether this workspace has any regular (non-skip-taskbar) windows
+    hasWindows() {
+        return this._workspace.list_windows().some(w => !w.is_skip_taskbar());
+    }
+
+    _activate() {
+        this._workspace.activate(global.get_current_time());
+    }
+
+    _updateLabelVisibility() {
+        this._label.visible = this._settings.get_boolean('show-workspace-number');
     }
 
     _queueRedisplay() {
@@ -76,18 +112,25 @@ class WorkspaceIndicator extends St.BoxLayout {
     }
 
     setActive(isActive) {
+        if (this._isActive === isActive) return;
         this._isActive = isActive;
         this._updateStyle();
     }
 
     _updateStyle() {
         const isHover = this.hover;
-        let bgColor = this._settings.get_string('inactive-color');
-        
+        let bgColor, borderColor;
+
         if (this._isActive) {
             bgColor = this._settings.get_string('active-color');
-        } else if (isHover) {
-            bgColor = this._settings.get_string('hover-color');
+            borderColor = this._settings.get_string('active-border-color');
+            this.add_style_class_name('active');
+        } else {
+            this.remove_style_class_name('active');
+            bgColor = isHover
+                ? this._settings.get_string('hover-color')
+                : this._settings.get_string('inactive-color');
+            borderColor = this._settings.get_string('border-color');
         }
 
         const radius = this._settings.get_int('border-radius');
@@ -96,7 +139,7 @@ class WorkspaceIndicator extends St.BoxLayout {
 
         this.style = `
             background-color: ${bgColor};
-            border-color: ${this._isActive ? bgColor : 'rgba(128, 128, 128, 0.3)'};
+            border-color: ${borderColor};
             border-radius: ${radius}px;
             padding: ${vPad}px ${hPad}px;
         `;
@@ -105,22 +148,28 @@ class WorkspaceIndicator extends St.BoxLayout {
     // Redraw the app icons for this workspace
     _redisplay() {
         this._appIconsBox.destroy_all_children();
-        const windows = this._workspace.list_windows();
-        const appCounts = new Map();
 
-        // Get a unique set of apps from the windows on this workspace
+        // Filter out background windows and keep a stable order so icons
+        // don't shuffle around every time a window is added or removed.
+        const windows = this._workspace.list_windows()
+            .filter(w => !w.is_skip_taskbar())
+            .sort((a, b) => a.get_stable_sequence() - b.get_stable_sequence());
+
+        const apps = [];
         for (const window of windows) {
-            if (window.is_skip_taskbar())
-                continue;
             const app = this._tracker.get_window_app(window);
-            if (app) {
-                appCounts.set(app, (appCounts.get(app) || 0) + 1);
-            }
+            if (!app) continue;
+
+            const entry = apps.find(e => e.app === app);
+            if (entry)
+                entry.count++;
+            else
+                apps.push({app, count: 1});
         }
 
         // Create and add an icon for each unique app
         const iconSize = this._settings.get_int('icon-size');
-        for (const [app, count] of appCounts) {
+        for (const {app, count} of apps) {
             const iconContainer = new St.Widget({
                 layout_manager: new Clutter.BinLayout(),
                 y_align: Clutter.ActorAlign.CENTER,
@@ -148,6 +197,10 @@ class WorkspaceIndicator extends St.BoxLayout {
             }
             this._appIconsBox.add_child(iconContainer);
         }
+
+        this._updateLabelVisibility();
+        this.accessible_name = `${this._workspace.index() + 1}: ` +
+            (apps.length ? apps.map(e => e.app.get_name()).join(', ') : 'empty');
     }
 
     // Cleanup on destruction
@@ -189,6 +242,8 @@ class WorkspaceAppsIndicator extends St.BoxLayout {
         });
         this._workspaceManager = global.workspace_manager;
         this._settings = settings;
+        this._indicators = [];
+        this._workspaceSignals = [];
 
         // Connect to workspace manager signals
         this._signals = [
@@ -203,16 +258,21 @@ class WorkspaceAppsIndicator extends St.BoxLayout {
             const nWorkspaces = this._workspaceManager.get_n_workspaces();
             let newIndex = activeIndex;
 
-            if (direction === Clutter.ScrollDirection.UP) {
+            if (direction === Clutter.ScrollDirection.UP)
                 newIndex--;
-            } else if (direction === Clutter.ScrollDirection.DOWN) {
+            else if (direction === Clutter.ScrollDirection.DOWN)
                 newIndex++;
-            }
+            else
+                return Clutter.EVENT_PROPAGATE;
 
-            if (newIndex >= 0 && newIndex < nWorkspaces && newIndex !== activeIndex) {
+            if (newIndex >= 0 && newIndex < nWorkspaces && newIndex !== activeIndex)
                 this._workspaceManager.get_workspace_by_index(newIndex).activate(event.get_time());
-            }
             return Clutter.EVENT_STOP;
+        });
+
+        this._settingsChangedId = this._settings.connect('changed', (s, key) => {
+            if (key === 'hide-empty-workspaces')
+                this._redisplay();
         });
 
         this._redisplay();
@@ -220,27 +280,59 @@ class WorkspaceAppsIndicator extends St.BoxLayout {
 
     // Redraw all workspace indicators
     _redisplay() {
+        this._disconnectWorkspaceSignals();
         this.destroy_all_children();
+        this._indicators = [];
 
         const nWorkspaces = this._workspaceManager.get_n_workspaces();
         for (let i = 0; i < nWorkspaces; i++) {
             const workspace = this._workspaceManager.get_workspace_by_index(i);
             const indicator = new WorkspaceIndicator(workspace, this._settings);
             this.add_child(indicator);
+            this._indicators.push(indicator);
         }
+
+        // When empty workspaces are hidden we need to re-evaluate visibility
+        // whenever a window is added to or removed from any workspace.
+        if (this._settings.get_boolean('hide-empty-workspaces')) {
+            for (const indicator of this._indicators) {
+                const workspace = indicator.workspace;
+                this._workspaceSignals.push(
+                    [workspace, workspace.connect('window-added', () => this._updateActiveWorkspace())],
+                    [workspace, workspace.connect('window-removed', () => this._updateActiveWorkspace())]);
+            }
+        }
+
         this._updateActiveWorkspace();
     }
 
-    // Apply a style to the currently active workspace indicator
+    _disconnectWorkspaceSignals() {
+        for (const [workspace, id] of this._workspaceSignals)
+            workspace.disconnect(id);
+        this._workspaceSignals = [];
+    }
+
+    // Apply a style to the currently active workspace indicator and hide
+    // empty ones when requested.
     _updateActiveWorkspace() {
-        const activeIndex = this._workspaceManager.get_active_workspace_index();
-        this.get_children().forEach((child, index) => {
-            child.setActive(index === activeIndex);
-        });
+        const activeWorkspace = this._workspaceManager.get_active_workspace();
+        const hideEmpty = this._settings.get_boolean('hide-empty-workspaces');
+
+        for (const indicator of this._indicators) {
+            const isActive = indicator.workspace === activeWorkspace;
+            indicator.setActive(isActive);
+            indicator.visible = !hideEmpty || isActive || indicator.hasWindows();
+        }
     }
 
     // Cleanup on destruction
     destroy() {
+        this._disconnectWorkspaceSignals();
+
+        if (this._settingsChangedId) {
+            this._settings.disconnect(this._settingsChangedId);
+            this._settingsChangedId = 0;
+        }
         if (this._signals) {
             this._signals.forEach(id => this._workspaceManager.disconnect(id));
             this._signals = null;
@@ -271,7 +363,7 @@ class ActivitiesButtonController {
         if (!this._button) return;
 
         const show = this._settings.get_boolean('show-activities');
-        
+
         if (show) {
             this._disconnectVisibilityListener();
             this._button.visible = true;
@@ -279,9 +371,8 @@ class ActivitiesButtonController {
             this._button.visible = false;
             if (!this._visibilityId) {
                 this._visibilityId = this._button.connect('notify::visible', () => {
-                    if (this._button.visible) {
+                    if (this._button.visible)
                         this._button.visible = false;
-                    }
                 });
             }
         }
@@ -299,9 +390,9 @@ class ActivitiesButtonController {
             this._settings.disconnect(this._settingsId);
             this._settingsId = 0;
         }
-        
+
         this._disconnectVisibilityListener();
-        
+
         if (this._button) {
             this._button.visible = true;
             this._button = null;
@@ -313,22 +404,43 @@ class ActivitiesButtonController {
 export default class WorkspaceAppsIndicatorExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
-        
+
         // Initialize the indicator
         this._indicator = new WorkspaceAppsIndicator(this._settings);
-        Main.panel._leftBox.insert_child_at_index(this._indicator, 0);
+        this._positionIndicator();
+
+        this._positionChangedId = this._settings.connect('changed::panel-position', () => {
+            this._positionIndicator();
+        });
 
         // Initialize the activities button controller
         this._activitiesButtonController = new ActivitiesButtonController(this._settings);
     }
 
+    _positionIndicator() {
+        const boxes = {
+            left: Main.panel._leftBox,
+            center: Main.panel._centerBox,
+            right: Main.panel._rightBox,
+        };
+        const box = boxes[this._settings.get_string('panel-position')] ?? Main.panel._leftBox;
+
+        this._indicator.get_parent()?.remove_child(this._indicator);
+        box.insert_child_at_index(this._indicator, 0);
+    }
+
     disable() {
+        if (this._positionChangedId) {
+            this._settings.disconnect(this._positionChangedId);
+            this._positionChangedId = 0;
+        }
+
         this._indicator?.destroy();
         this._indicator = null;
 
         this._activitiesButtonController?.destroy();
         this._activitiesButtonController = null;
-        
+
         this._settings = null;
     }
 }
