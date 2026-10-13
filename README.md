@@ -11,9 +11,14 @@ window open. The active workspace is highlighted using the configured color.
 
 - Workspace pills with per-workspace app icons and window-count badges.
 - Click a pill to switch to that workspace.
-- Scroll over the pills to move between workspaces.
+- Click an app icon to focus that app; click again to cycle through its windows.
+- Middle-click an app icon to close all of its windows on the workspace.
+- A subtle underline marks the icon of the focused app.
+- A red dot marks apps whose windows are requesting attention.
+- Minimized apps are dimmed.
+- Scroll over the pills to move between workspaces (with optional wrap-around).
 - Fully configurable appearance (colors, borders, radius, padding, icon size).
-- Optional workspace number labels.
+- Optional workspace number or workspace name labels.
 - Option to hide empty workspaces (the active workspace is always shown).
 - Place the pills on the left, center, or right of the top bar.
 - Optionally hide the default Activities button.
@@ -55,7 +60,13 @@ Settings are available through the GNOME Extensions app or
 | Icon Size | Size of the app icons in pixels. |
 | Panel Position | Left, center, or right of the top bar. |
 | Show Workspace Number | Toggle the numeric label. |
+| Show Workspace Name | Use the workspace name when set, falling back to the number. |
 | Hide Empty Workspaces | Hide workspaces without windows. |
+| Wrap Scrolling | Scroll past the ends wraps to the other end. |
+| Close on Middle Click | Middle-click an app icon closes its windows. |
+| Highlight Focused App | Underline the focused app's icon. |
+| Highlight Attention | Show a dot for apps requesting attention. |
+| Dim Minimized Apps | Fade icons whose windows are all minimized. |
 | Show Activities Button | Show/hide the default Activities button. |
 
 ## Compatibility

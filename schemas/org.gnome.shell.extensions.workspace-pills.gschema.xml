@@ -41,9 +41,33 @@
       <default>true</default>
       <summary>Show Workspace Number</summary>
     </key>
+    <key name="show-workspace-name" type="b">
+      <default>false</default>
+      <summary>Show Workspace Name</summary>
+    </key>
     <key name="hide-empty-workspaces" type="b">
       <default>false</default>
       <summary>Hide Empty Workspaces</summary>
+    </key>
+    <key name="scroll-wrap" type="b">
+      <default>false</default>
+      <summary>Wrap Around When Scrolling</summary>
+    </key>
+    <key name="close-on-middle-click" type="b">
+      <default>true</default>
+      <summary>Close App Windows on Middle Click</summary>
+    </key>
+    <key name="highlight-focused-app" type="b">
+      <default>true</default>
+      <summary>Highlight the Focused App</summary>
+    </key>
+    <key name="highlight-attention" type="b">
+      <default>true</default>
+      <summary>Highlight Windows Demanding Attention</summary>
+    </key>
+    <key name="dim-minimized" type="b">
+      <default>true</default>
+      <summary>Dim Minimized Apps</summary>
     </key>
     <key name="panel-position" type="s">
       <default>'left'</default>

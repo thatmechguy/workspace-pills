@@ -74,29 +74,33 @@ export default class WorkspacePillsPreferences extends ExtensionPreferences {
         });
         layoutGroup.add(positionRow);
 
-        const numberRow = new Adw.SwitchRow({
-            title: 'Show Workspace Number',
-            subtitle: 'Display the workspace number before its app icons',
-        });
-        settings.bind('show-workspace-number', numberRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-        layoutGroup.add(numberRow);
+        const addSwitch = (group, title, subtitle, key) => {
+            const row = new Adw.SwitchRow({ title, subtitle });
+            settings.bind(key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
+            group.add(row);
+        };
 
-        const emptyRow = new Adw.SwitchRow({
-            title: 'Hide Empty Workspaces',
-            subtitle: 'Only show the active workspace and workspaces with windows',
+        addSwitch(layoutGroup, 'Show Workspace Number', 'Display the workspace number before its app icons', 'show-workspace-number');
+        addSwitch(layoutGroup, 'Show Workspace Name', 'Use the workspace name when one is set (falls back to the number)', 'show-workspace-name');
+        addSwitch(layoutGroup, 'Hide Empty Workspaces', 'Only show the active workspace and workspaces with windows', 'hide-empty-workspaces');
+        addSwitch(layoutGroup, 'Wrap Scrolling', 'Continue from the end back to the start when scrolling', 'scroll-wrap');
+
+        // App Icons
+        const iconsGroup = new Adw.PreferencesGroup({
+            title: 'App Icons',
+            description: 'Left-click an app icon to focus it; click again to cycle its windows.',
         });
-        settings.bind('hide-empty-workspaces', emptyRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-        layoutGroup.add(emptyRow);
+        page.add(iconsGroup);
+
+        addSwitch(iconsGroup, 'Close on Middle Click', 'Middle-click an app icon to close all of its windows on the workspace', 'close-on-middle-click');
+        addSwitch(iconsGroup, 'Highlight Focused App', 'Underline the icon of the currently focused app', 'highlight-focused-app');
+        addSwitch(iconsGroup, 'Highlight Attention', 'Show a dot when an app is requesting attention', 'highlight-attention');
+        addSwitch(iconsGroup, 'Dim Minimized Apps', 'Fade icons whose windows are all minimized', 'dim-minimized');
 
         // Behavior
         const behaviorGroup = new Adw.PreferencesGroup({ title: 'Behavior' });
         page.add(behaviorGroup);
 
-        const activitiesRow = new Adw.SwitchRow({
-            title: 'Show Activities Button',
-            subtitle: 'Show the default GNOME activities indicator',
-        });
-        settings.bind('show-activities', activitiesRow, 'active', Gio.SettingsBindFlags.DEFAULT);
-        behaviorGroup.add(activitiesRow);
+        addSwitch(behaviorGroup, 'Show Activities Button', 'Show the default GNOME activities indicator', 'show-activities');
     }
 }

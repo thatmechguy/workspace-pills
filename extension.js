@@ -2,6 +2,7 @@
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
+import Gio from 'gi://Gio';
 import St from 'gi://St';
 import Shell from 'gi://Shell';
 import GLib from 'gi://GLib';
@@ -10,12 +11,153 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 /**
+ * Represents a single app icon inside a workspace pill.
+ *
+ * Left-click focuses the app's window on the workspace, cycling through its
+ * windows when it is already focused. Middle-click (optional) closes all of
+ * the app's windows on the workspace.
+ */
+const WorkspaceAppIcon = GObject.registerClass(
+class WorkspaceAppIcon extends St.Widget {
+    _init(app, windows, settings) {
+        super._init({
+            layout_manager: new Clutter.BinLayout(),
+            y_align: Clutter.ActorAlign.CENTER,
+            reactive: true,
+            track_hover: true,
+            style_class: 'workspace-pill-app-icon-container',
+        });
+
+        this._app = app;
+        this._windows = windows;
+        this._settings = settings;
+        this._windowSignals = [];
+
+        this._icon = new St.Icon({
+            gicon: app.get_icon(),
+            icon_size: settings.get_int('icon-size'),
+            style_class: 'workspace-pill-app-icon',
+            x_expand: true,
+            y_expand: true,
+        });
+        this.add_child(this._icon);
+
+        if (windows.length > 1) {
+            this._badge = new St.Label({
+                text: windows.length.toString(),
+                style_class: 'workspace-pill-app-badge',
+                x_expand: true,
+                y_expand: true,
+                x_align: Clutter.ActorAlign.END,
+                y_align: Clutter.ActorAlign.START,
+            });
+            this.add_child(this._badge);
+        }
+
+        // Focused app indicator (a small underline below the icon)
+        this._focusUnderline = new St.Widget({
+            style_class: 'workspace-pill-app-underline',
+            x_expand: true,
+            x_align: Clutter.ActorAlign.FILL,
+            y_align: Clutter.ActorAlign.END,
+            visible: false,
+        });
+        this.add_child(this._focusUnderline);
+
+        // Attention indicator (a small dot for windows requesting attention)
+        this._attentionDot = new St.Widget({
+            style_class: 'workspace-pill-app-attention',
+            x_align: Clutter.ActorAlign.START,
+            y_align: Clutter.ActorAlign.START,
+            visible: false,
+        });
+        this.add_child(this._attentionDot);
+
+        this.accessible_name = app.get_name();
+
+        this.connect('button-press-event', (actor, event) => this._onButtonPress(event));
+
+        // Watch the windows this icon represents for state changes
+        for (const window of windows) {
+            this._windowSignals.push(
+                [window, window.connect('notify::demands-attention', () => this._updateState())],
+                [window, window.connect('notify::minimized', () => this._updateState())]);
+        }
+        this._focusWindowId = global.display.connect('notify::focus-window', () => this._updateState());
+
+        this._updateState();
+    }
+
+    _onButtonPress(event) {
+        const button = event.get_button();
+
+        if (button === 1) {
+            this._activateApp();
+            return Clutter.EVENT_STOP;
+        }
+
+        if (button === 2 && this._settings.get_boolean('close-on-middle-click')) {
+            for (const window of this._windows)
+                window.delete(global.get_current_time());
+            return Clutter.EVENT_STOP;
+        }
+
+        return Clutter.EVENT_PROPAGATE;
+    }
+
+    // Focus the app's most recent window, cycling when it is already focused
+    _activateApp() {
+        if (!this._windows.length)
+            return;
+
+        const focus = global.display.focus_window;
+        const index = this._windows.indexOf(focus);
+        const target = index === -1
+            ? this._windows[0]
+            : this._windows[(index + 1) % this._windows.length];
+
+        target.activate(global.get_current_time());
+    }
+
+    _updateState() {
+        // Focused app underline
+        const focus = global.display.focus_window;
+        this._focusUnderline.visible =
+            this._settings.get_boolean('highlight-focused-app') &&
+            !!focus && this._windows.includes(focus);
+
+        // Attention dot
+        this._attentionDot.visible =
+            this._settings.get_boolean('highlight-attention') &&
+            this._windows.some(w => w.demands_attention);
+
+        // Dim icons whose windows are all minimized
+        const dimmed = this._settings.get_boolean('dim-minimized') &&
+            this._windows.length > 0 &&
+            this._windows.every(w => w.minimized);
+        this._icon.opacity = dimmed ? 120 : 255;
+    }
+
+    destroy() {
+        for (const [window, id] of this._windowSignals)
+            window.disconnect(id);
+        this._windowSignals = [];
+
+        if (this._focusWindowId) {
+            global.display.disconnect(this._focusWindowId);
+            this._focusWindowId = 0;
+        }
+        super.destroy();
+    }
+});
+
+/**
  * Represents a single workspace indicator in the top bar.
  * It displays the workspace number and the icons of running apps.
  */
 const WorkspaceIndicator = GObject.registerClass(
 class WorkspaceIndicator extends St.BoxLayout {
-    _init(workspace, settings) {
+    _init(workspace, settings, wmSettings) {
         super._init({
             style_class: 'workspace-pill',
             reactive: true,
@@ -25,13 +167,13 @@ class WorkspaceIndicator extends St.BoxLayout {
 
         this._workspace = workspace;
         this._settings = settings;
+        this._wmSettings = wmSettings;
         this._tracker = Shell.WindowTracker.get_default();
         this._isActive = false;
         this._redisplayIdleId = 0;
 
-        // Add the workspace number
+        // Add the workspace number/name
         this._label = new St.Label({
-            text: (this._workspace.index() + 1).toString(),
             y_align: Clutter.ActorAlign.CENTER,
             style_class: 'workspace-pill-label',
         });
@@ -67,10 +209,14 @@ class WorkspaceIndicator extends St.BoxLayout {
         this._windowAddedId = this._workspace.connect('window-added', () => this._queueRedisplay());
         this._windowRemovedId = this._workspace.connect('window-removed', () => this._queueRedisplay());
         this._trackerChangedId = this._tracker.connect('tracked-windows-changed', () => this._queueRedisplay());
+        this._wmSettingsId = this._wmSettings.connect('changed::workspace-names', () => this._updateLabel());
 
         // Watch for setting changes and hover
         this._settingsChangedId = this._settings.connect('changed', (s, key) => {
-            if (key === 'icon-size' || key === 'show-workspace-number')
+            if (key === 'icon-size' || key === 'show-workspace-number' ||
+                key === 'show-workspace-name' || key === 'highlight-focused-app' ||
+                key === 'highlight-attention' || key === 'dim-minimized' ||
+                key === 'close-on-middle-click')
                 this._queueRedisplay();
             if (key === 'active-color' || key === 'inactive-color' ||
                 key === 'hover-color' || key === 'border-color' ||
@@ -80,7 +226,6 @@ class WorkspaceIndicator extends St.BoxLayout {
         });
         this.connect('notify::hover', () => this._updateStyle());
 
-        this._updateLabelVisibility();
         this._redisplay();
         this._updateStyle();
     }
@@ -98,8 +243,23 @@ class WorkspaceIndicator extends St.BoxLayout {
         this._workspace.activate(global.get_current_time());
     }
 
-    _updateLabelVisibility() {
-        this._label.visible = this._settings.get_boolean('show-workspace-number');
+    // Update the label text based on the configured label mode
+    _updateLabel() {
+        const index = this._workspace.index();
+        const showName = this._settings.get_boolean('show-workspace-name');
+        const showNumber = this._settings.get_boolean('show-workspace-number');
+
+        let text = '';
+        if (showName) {
+            const names = this._wmSettings.get_strv('workspace-names');
+            const name = names[index];
+            text = name && name.trim() ? name : (index + 1).toString();
+        } else if (showNumber) {
+            text = (index + 1).toString();
+        }
+
+        this._label.text = text;
+        this._label.visible = text !== '';
     }
 
     _queueRedisplay() {
@@ -145,7 +305,7 @@ class WorkspaceIndicator extends St.BoxLayout {
         `;
     }
 
-    // Redraw the app icons for this workspace
+    // Rebuild the app icons for this workspace
     _redisplay() {
         this._appIconsBox.destroy_all_children();
 
@@ -155,52 +315,24 @@ class WorkspaceIndicator extends St.BoxLayout {
             .filter(w => !w.is_skip_taskbar())
             .sort((a, b) => a.get_stable_sequence() - b.get_stable_sequence());
 
-        const apps = [];
+        const apps = new Map();
         for (const window of windows) {
             const app = this._tracker.get_window_app(window);
             if (!app) continue;
 
-            const entry = apps.find(e => e.app === app);
-            if (entry)
-                entry.count++;
-            else
-                apps.push({app, count: 1});
+            if (!apps.has(app))
+                apps.set(app, []);
+            apps.get(app).push(window);
         }
 
-        // Create and add an icon for each unique app
-        const iconSize = this._settings.get_int('icon-size');
-        for (const {app, count} of apps) {
-            const iconContainer = new St.Widget({
-                layout_manager: new Clutter.BinLayout(),
-                y_align: Clutter.ActorAlign.CENTER,
-            });
-
-            const icon = new St.Icon({
-                gicon: app.get_icon(),
-                icon_size: iconSize,
-                style_class: 'workspace-pill-app-icon',
-                x_expand: true,
-                y_expand: true,
-            });
-            iconContainer.add_child(icon);
-
-            if (count > 1) {
-                const badge = new St.Label({
-                    text: count.toString(),
-                    style_class: 'workspace-pill-app-badge',
-                    x_expand: true,
-                    y_expand: true,
-                    x_align: Clutter.ActorAlign.END,
-                    y_align: Clutter.ActorAlign.START,
-                });
-                iconContainer.add_child(badge);
-            }
-            this._appIconsBox.add_child(iconContainer);
+        for (const [app, appWindows] of apps) {
+            this._appIconsBox.add_child(
+                new WorkspaceAppIcon(app, appWindows, this._settings));
         }
 
-        this._updateLabelVisibility();
+        this._updateLabel();
         this.accessible_name = `${this._workspace.index() + 1}: ` +
-            (apps.length ? apps.map(e => e.app.get_name()).join(', ') : 'empty');
+            (apps.size ? [...apps.keys()].map(a => a.get_name()).join(', ') : 'empty');
     }
 
     // Cleanup on destruction
@@ -220,6 +352,10 @@ class WorkspaceIndicator extends St.BoxLayout {
         if (this._trackerChangedId) {
             this._tracker.disconnect(this._trackerChangedId);
             this._trackerChangedId = 0;
+        }
+        if (this._wmSettingsId) {
+            this._wmSettings.disconnect(this._wmSettingsId);
+            this._wmSettingsId = 0;
         }
         if (this._settingsChangedId) {
             this._settings.disconnect(this._settingsChangedId);
@@ -242,6 +378,7 @@ class WorkspaceAppsIndicator extends St.BoxLayout {
         });
         this._workspaceManager = global.workspace_manager;
         this._settings = settings;
+        this._wmSettings = new Gio.Settings({schema_id: 'org.gnome.desktop.wm.preferences'});
         this._indicators = [];
         this._workspaceSignals = [];
 
@@ -249,26 +386,11 @@ class WorkspaceAppsIndicator extends St.BoxLayout {
         this._signals = [
             this._workspaceManager.connect('notify::n-workspaces', () => this._redisplay()),
             this._workspaceManager.connect('workspace-switched', () => this._updateActiveWorkspace()),
+            this._workspaceManager.connect('workspaces-reordered', () => this._redisplay()),
         ];
 
         // Handle scroll events to switch workspaces
-        this.connect('scroll-event', (actor, event) => {
-            const direction = event.get_scroll_direction();
-            const activeIndex = this._workspaceManager.get_active_workspace_index();
-            const nWorkspaces = this._workspaceManager.get_n_workspaces();
-            let newIndex = activeIndex;
-
-            if (direction === Clutter.ScrollDirection.UP)
-                newIndex--;
-            else if (direction === Clutter.ScrollDirection.DOWN)
-                newIndex++;
-            else
-                return Clutter.EVENT_PROPAGATE;
-
-            if (newIndex >= 0 && newIndex < nWorkspaces && newIndex !== activeIndex)
-                this._workspaceManager.get_workspace_by_index(newIndex).activate(event.get_time());
-            return Clutter.EVENT_STOP;
-        });
+        this.connect('scroll-event', (actor, event) => this._onScroll(event));
 
         this._settingsChangedId = this._settings.connect('changed', (s, key) => {
             if (key === 'hide-empty-workspaces')
@@ -276,6 +398,27 @@ class WorkspaceAppsIndicator extends St.BoxLayout {
         });
 
         this._redisplay();
+    }
+
+    _onScroll(event) {
+        const direction = event.get_scroll_direction();
+        const activeIndex = this._workspaceManager.get_active_workspace_index();
+        const nWorkspaces = this._workspaceManager.get_n_workspaces();
+
+        let newIndex = activeIndex;
+        if (direction === Clutter.ScrollDirection.UP)
+            newIndex--;
+        else if (direction === Clutter.ScrollDirection.DOWN)
+            newIndex++;
+        else
+            return Clutter.EVENT_PROPAGATE;
+
+        if (this._settings.get_boolean('scroll-wrap'))
+            newIndex = (newIndex + nWorkspaces) % nWorkspaces;
+
+        if (newIndex >= 0 && newIndex < nWorkspaces && newIndex !== activeIndex)
+            this._workspaceManager.get_workspace_by_index(newIndex).activate(event.get_time());
+        return Clutter.EVENT_STOP;
     }
 
     // Redraw all workspace indicators
@@ -287,7 +430,7 @@ class WorkspaceAppsIndicator extends St.BoxLayout {
         const nWorkspaces = this._workspaceManager.get_n_workspaces();
         for (let i = 0; i < nWorkspaces; i++) {
             const workspace = this._workspaceManager.get_workspace_by_index(i);
-            const indicator = new WorkspaceIndicator(workspace, this._settings);
+            const indicator = new WorkspaceIndicator(workspace, this._settings, this._wmSettings);
             this.add_child(indicator);
             this._indicators.push(indicator);
         }
