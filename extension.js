@@ -152,6 +152,39 @@ class WorkspaceAppIcon extends St.Widget {
 });
 
 /**
+ * A panel button styled as a pill that opens the GNOME Shell overview.
+ */
+const OverviewButton = GObject.registerClass(
+class OverviewButton extends St.Button {
+    _init() {
+        super._init({
+            style_class: 'workspace-pill workspace-pill-overview',
+            can_focus: true,
+            track_hover: true,
+        });
+
+        this.child = new St.Icon({
+            icon_name: 'view-app-grid-symbolic',
+            icon_size: 16,
+            style_class: 'workspace-pill-overview-icon',
+        });
+
+        this.accessible_name = 'Overview';
+        this.connect('clicked', () => this._toggleOverview());
+    }
+
+    _toggleOverview() {
+        if (typeof Main.overview.toggle === 'function') {
+            Main.overview.toggle();
+        } else if (Main.overview.visible) {
+            Main.overview.hide();
+        } else {
+            Main.overview.show();
+        }
+    }
+});
+
+/**
  * Represents a single workspace indicator in the top bar.
  * It displays the workspace number and the icons of running apps.
  */
@@ -221,7 +254,8 @@ class WorkspaceIndicator extends St.BoxLayout {
             if (key === 'active-color' || key === 'inactive-color' ||
                 key === 'hover-color' || key === 'border-color' ||
                 key === 'active-border-color' || key === 'border-radius' ||
-                key === 'vertical-padding' || key === 'horizontal-padding')
+                key === 'vertical-padding' || key === 'horizontal-padding' ||
+                key === 'match-shell-color')
                 this._updateStyle();
         });
         this.connect('notify::hover', () => this._updateStyle());
@@ -279,14 +313,23 @@ class WorkspaceIndicator extends St.BoxLayout {
 
     _updateStyle() {
         const isHover = this.hover;
-        let bgColor, borderColor;
+        let bgColor = '';
+        let borderColor = '';
 
         if (this._isActive) {
-            bgColor = this._settings.get_string('active-color');
-            borderColor = this._settings.get_string('active-border-color');
             this.add_style_class_name('active');
+            if (this._settings.get_boolean('match-shell-color')) {
+                // Let the stylesheet resolve -st-accent-color so the pill
+                // always matches the GNOME Shell accent color.
+                this.add_style_class_name('match-accent');
+            } else {
+                this.remove_style_class_name('match-accent');
+                bgColor = this._settings.get_string('active-color');
+                borderColor = this._settings.get_string('active-border-color');
+            }
         } else {
             this.remove_style_class_name('active');
+            this.remove_style_class_name('match-accent');
             bgColor = isHover
                 ? this._settings.get_string('hover-color')
                 : this._settings.get_string('inactive-color');
@@ -298,8 +341,8 @@ class WorkspaceIndicator extends St.BoxLayout {
         const hPad = this._settings.get_int('horizontal-padding');
 
         this.style = `
-            background-color: ${bgColor};
-            border-color: ${borderColor};
+            ${bgColor ? `background-color: ${bgColor};` : ''}
+            ${borderColor ? `border-color: ${borderColor};` : ''}
             border-radius: ${radius}px;
             padding: ${vPad}px ${hPad}px;
         `;
@@ -393,7 +436,7 @@ class WorkspaceAppsIndicator extends St.BoxLayout {
         this.connect('scroll-event', (actor, event) => this._onScroll(event));
 
         this._settingsChangedId = this._settings.connect('changed', (s, key) => {
-            if (key === 'hide-empty-workspaces')
+            if (key === 'hide-empty-workspaces' || key === 'show-overview-button')
                 this._redisplay();
         });
 
@@ -426,6 +469,9 @@ class WorkspaceAppsIndicator extends St.BoxLayout {
         this._disconnectWorkspaceSignals();
         this.destroy_all_children();
         this._indicators = [];
+
+        if (this._settings.get_boolean('show-overview-button'))
+            this.add_child(new OverviewButton());
 
         const nWorkspaces = this._workspaceManager.get_n_workspaces();
         for (let i = 0; i < nWorkspaces; i++) {

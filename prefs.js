@@ -11,6 +11,12 @@ export default class WorkspacePillsPreferences extends ExtensionPreferences {
         const page = new Adw.PreferencesPage();
         window.add(page);
 
+        const addSwitch = (group, title, subtitle, key) => {
+            const row = new Adw.SwitchRow({ title, subtitle });
+            settings.bind(key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
+            group.add(row);
+        };
+
         // Appearance
         const appearanceGroup = new Adw.PreferencesGroup({ title: 'Appearance' });
         page.add(appearanceGroup);
@@ -58,6 +64,8 @@ export default class WorkspacePillsPreferences extends ExtensionPreferences {
         createSpinRow(appearanceGroup, 'Horizontal Padding', 'horizontal-padding', 0, 30);
         createSpinRow(appearanceGroup, 'Icon Size', 'icon-size', 8, 64);
 
+        addSwitch(appearanceGroup, 'Match Shell Accent Color', 'Use the GNOME Shell accent color for the active pill', 'match-shell-color');
+
         // Layout
         const layoutGroup = new Adw.PreferencesGroup({ title: 'Layout' });
         page.add(layoutGroup);
@@ -74,16 +82,11 @@ export default class WorkspacePillsPreferences extends ExtensionPreferences {
         });
         layoutGroup.add(positionRow);
 
-        const addSwitch = (group, title, subtitle, key) => {
-            const row = new Adw.SwitchRow({ title, subtitle });
-            settings.bind(key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
-            group.add(row);
-        };
-
         addSwitch(layoutGroup, 'Show Workspace Number', 'Display the workspace number before its app icons', 'show-workspace-number');
         addSwitch(layoutGroup, 'Show Workspace Name', 'Use the workspace name when one is set (falls back to the number)', 'show-workspace-name');
         addSwitch(layoutGroup, 'Hide Empty Workspaces', 'Only show the active workspace and workspaces with windows', 'hide-empty-workspaces');
         addSwitch(layoutGroup, 'Wrap Scrolling', 'Continue from the end back to the start when scrolling', 'scroll-wrap');
+        addSwitch(layoutGroup, 'Show Overview Button', 'Add a pill button that opens the GNOME overview', 'show-overview-button');
 
         // App Icons
         const iconsGroup = new Adw.PreferencesGroup({

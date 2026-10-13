@@ -21,6 +21,10 @@
       <default>'#3584e4'</default>
       <summary>Active Pill Border Color</summary>
     </key>
+    <key name="match-shell-color" type="b">
+      <default>true</default>
+      <summary>Match Active Color with the GNOME Shell Accent Color</summary>
+    </key>
     <key name="border-radius" type="i">
       <default>12</default>
       <summary>Border Radius</summary>
@@ -81,6 +85,10 @@
     <key name="show-activities" type="b">
       <default>false</default>
       <summary>Show Activities Button</summary>
+    </key>
+    <key name="show-overview-button" type="b">
+      <default>false</default>
+      <summary>Show Overview Button</summary>
     </key>
   </schema>
 </schemalist>

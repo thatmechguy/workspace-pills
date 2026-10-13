@@ -11,6 +11,8 @@ window open. The active workspace is highlighted using the configured color.
 
 - Workspace pills with per-workspace app icons and window-count badges.
 - Click a pill to switch to that workspace.
+- Optional Overview button that opens the GNOME Shell overview.
+- Active pill follows the GNOME Shell accent color (or a custom color).
 - Click an app icon to focus that app; click again to cycle through its windows.
 - Middle-click an app icon to close all of its windows on the workspace.
 - A subtle underline marks the icon of the focused app.
@@ -54,6 +56,7 @@ Settings are available through the GNOME Extensions app or
 | Setting | Description |
 | --- | --- |
 | Inactive / Active / Hover Color | Pill background colors. |
+| Match Shell Accent Color | Use the system accent color for the active pill (GNOME 47+). |
 | Inactive / Active Border Color | Pill border colors. |
 | Border Radius | Corner roundness in pixels. |
 | Vertical / Horizontal Padding | Inner spacing of each pill. |
@@ -63,6 +66,7 @@ Settings are available through the GNOME Extensions app or
 | Show Workspace Name | Use the workspace name when set, falling back to the number. |
 | Hide Empty Workspaces | Hide workspaces without windows. |
 | Wrap Scrolling | Scroll past the ends wraps to the other end. |
+| Show Overview Button | Add a pill button that opens the overview. |
 | Close on Middle Click | Middle-click an app icon closes its windows. |
 | Highlight Focused App | Underline the focused app's icon. |
 | Highlight Attention | Show a dot for apps requesting attention. |
